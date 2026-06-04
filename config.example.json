@@ -1,0 +1,10 @@
+{
+    "anki_deck": "YourDeckName",
+    "anki_note_type": "Basic",
+    "anki_fields": {
+        "sentence": "Front",
+        "audio": "Back"
+    },
+    "audio_buffer_seconds": 5,
+    "server_port": 5000
+}
