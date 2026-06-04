@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YoutubeSentenceMiner</title>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            color: #ffffff;
+            margin-bottom: 1.5rem;
+        }
+
+        .url-bar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 0.95rem;
+        }
+
+        button {
+            padding: 0.6rem 1.2rem;
+            background: #4a90d9;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        button:hover {
+            background: #357abd;
+        }
+
+        #status {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 1rem;
+            min-height: 1.2rem;
+        }
+
+        #transcript {
+            line-height: 2.2;
+            font-size: 1.2rem;
+        }
+
+        .caption-line {
+            display: block;
+            padding: 0.3rem 0.5rem;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background 0.1s;
+        }
+
+        .caption-line:hover {
+            background: #2a2a2a;
+        }
+
+        .caption-line.mining {
+            background: #2a3a2a;
+            color: #aaa;
+        }
+
+        .caption-line.mined {
+            background: #1a2a1a;
+            color: #4a8a4a;
+        }
+
+        .caption-line.error {
+            background: #2a1a1a;
+            color: #8a4a4a;
+        }
+
+        .timestamp {
+            font-size: 0.75rem;
+            color: #555;
+            margin-right: 0.8rem;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>YoutubeSentenceMiner</h1>
+
+    <div class="url-bar">
+        <input type="text" id="url-input" placeholder="Paste a YouTube URL..." />
+        <button onclick="loadTranscript()">Load</button>
+    </div>
+
+    <div id="status"></div>
+    <div id="transcript"></div>
+
+    <script>
+        let currentUrl = "";
+
+        async function loadTranscript() {
+            const url = document.getElementById("url-input").value.trim();
+            if (!url) return;
+
+            currentUrl = url;
+
+            const status = document.getElementById("status");
+            const transcript = document.getElementById("transcript");
+
+            status.textContent = "Fetching captions...";
+            transcript.innerHTML = "";
+
+            try {
+                const response = await fetch("/load", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    status.textContent = "Error: " + data.error;
+                    return;
+                }
+
+                status.textContent = `Loaded ${data.captions.length} lines (${data.source})`;
+
+                data.captions.forEach(entry => {
+                    const line = document.createElement("span");
+                    line.className = "caption-line";
+                    line.dataset.start = entry.start;
+                    line.dataset.end = entry.end;
+                    line.dataset.text = entry.text;
+
+                    const ts = document.createElement("span");
+                    ts.className = "timestamp";
+                    ts.textContent = entry.start;
+
+                    const text = document.createElement("span");
+                    text.textContent = entry.text;
+
+                    line.appendChild(ts);
+                    line.appendChild(text);
+                    line.addEventListener("click", () => mineLine(line));
+                    transcript.appendChild(line);
+                });
+
+            } catch (err) {
+                status.textContent = "Error: " + err.message;
+            }
+        }
+
+        async function mineLine(line) {
+            if (line.classList.contains("mining")) return;
+
+            line.classList.add("mining");
+            document.getElementById("status").textContent = "Mining...";
+
+            try {
+                const response = await fetch("/mine", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        url: currentUrl,
+                        sentence: line.dataset.text,
+                        start: line.dataset.start,
+                        end: line.dataset.end
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    line.classList.remove("mining");
+                    line.classList.add("error");
+                    document.getElementById("status").textContent = "Error: " + data.error;
+                    return;
+                }
+
+                line.classList.remove("mining");
+                line.classList.add("mined");
+                document.getElementById("status").textContent = `Card added! Note ID: ${data.note_id}`;
+
+            } catch (err) {
+                line.classList.remove("mining");
+                line.classList.add("error");
+                document.getElementById("status").textContent = "Error: " + err.message;
+            }
+        }
+
+        document.getElementById("url-input").addEventListener("keydown", e => {
+            if (e.key === "Enter") loadTranscript();
+        });
+    </script>
+</body>
+</html>
